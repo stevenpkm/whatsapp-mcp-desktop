@@ -1,0 +1,33 @@
+{
+  "manifest_version": "0.3",
+  "name": "whatsapp-mcp-desktop",
+  "display_name": "WhatsApp (read only)",
+  "version": "1.3.0",
+  "description": "Let Claude read and search your own WhatsApp. It never sends a message. Everything stays on this computer.",
+  "author": { "name": "whatsapp-mcp-desktop contributors" },
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.mjs"]
+    }
+  },
+  "tools": [
+    { "name": "connect_whatsapp", "description": "Open the QR page to link WhatsApp" },
+    { "name": "open_settings_page", "description": "Open the settings page: connection, drop history, alerts" },
+    { "name": "status", "description": "Is WhatsApp connected, how many messages are stored" },
+    { "name": "list_chats", "description": "List chats" },
+    { "name": "read_chat", "description": "Read one chat" },
+    { "name": "search", "description": "Search messages" },
+    { "name": "get_image", "description": "Look at a picture from a message" },
+    { "name": "transcribe_voice", "description": "Turn a voice note into text (with your Gemini or OpenAI key)" },
+    { "name": "watch_video", "description": "Describe a video and its speech (with your Gemini key)" },
+    { "name": "save_file", "description": "Save a file from a message to Downloads" }
+  ],
+  "compatibility": {
+    "platforms": ["win32", "darwin"],
+    "runtimes": { "node": ">=22.5.0" }
+  }
+}
