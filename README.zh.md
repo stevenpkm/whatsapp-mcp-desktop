@@ -60,8 +60,9 @@ QR 大约 20 秒会自己换一次，不用 refresh。页面写 **Connected** �
 
 照片一收到就存起来。其他 file (PDF、Word、Excel、语音、video) 要你问的时候才去 WhatsApp 拿，所以那时 WhatsApp 要连着。
 
-- **读文件**：PDF 和文字 file (txt、md、csv、json、html) 里面写什么，Claude 读得到。扫描的 PDF、Word、Excel 读不到，可以先存起来。
-- **存一个 file 或整个 chat**：存去 Downloads > WhatsApp MCP (整个 chat 会放进自己的 folder)，用对方原本的 file 名字。存在那里的 file 没有加密。
+- **AI 拿到原本的 file**：一个 file，或者整个 chat 的 file 一次拿 (文件、照片、video、语音)，存去 Downloads > WhatsApp MCP，用对方原本的 file 名字。存在那里的 file 没有加密。
+- **AI 自己打开来读**：用 Claude Code 的话，Claude 会用它自己的工具打开这些 file (PDF、Word、Excel、照片…)，自己决定怎样整理、总结。例子："把 Supplier group 所有 file 拿出来，总结那些 invoice"。
+- 用 Claude Desktop 的话，它打不开电脑里的 file，不过 PDF 和文字 file 里面写什么，Claude 还是读得到。
 - **放去别的地方**：每个存好的 file 都会给完整路径和 SHA-256，别的 connector 就可以接手。例子：Claude 有连 Google Drive 的话，讲 "把 Supplier group 所有 invoice 存起来，放进我 Drive 的 Invoices folder"。
 - File 最大 25MB (video 100MB)。太旧的 file WhatsApp 可能已经没有了，会写 skipped。
 

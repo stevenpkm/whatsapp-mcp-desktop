@@ -60,8 +60,9 @@ Back in Claude, ask: **summarize my WhatsApp today**
 
 Pictures are kept as they arrive. Other files (PDFs, Word, Excel, voice notes, videos) are fetched from WhatsApp only when you ask, so they need WhatsApp connected at that moment.
 
-- **Read a document**: Claude reads the text inside PDFs and text files (txt, md, csv, json, html). Scanned PDFs, Word and Excel files cannot be read this way; save them instead.
-- **Save one file or a whole chat**: files go to Downloads > WhatsApp MCP (a whole chat into its own folder), under the sender's file name. Files there are not encrypted.
+- **The AI gets the real files**: one file, or every file of a chat at once (documents, photos, videos, voice notes), saved to Downloads > WhatsApp MCP under the sender's file name. Files there are not encrypted.
+- **The AI reads them itself**: in Claude Code, Claude opens the saved files with its own tools (PDF, Word, Excel, photos...) and decides how to sort and summarize them. Example: "pull every file from the Supplier group and summarize the invoices".
+- In Claude Desktop, which cannot open files on your computer, Claude can still read the text of PDFs and text files directly.
 - **Put them somewhere else**: each saved file comes with its full path and SHA-256, so another connector can pick it up. Example: with a Google Drive connector in Claude, say "save all the invoices from the Supplier group and put them in my Drive folder Invoices".
 - Files up to 25 MB (videos 100 MB). Very old files may be gone from WhatsApp; they are listed as skipped.
 
