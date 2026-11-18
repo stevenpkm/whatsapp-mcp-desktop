@@ -21,9 +21,11 @@ export interface Settings {
   alerts: boolean;
   // Which saved key turns voice notes into text when both are saved.
   voiceWith: "gemini" | "openai";
+  // Off by default. Only the settings page turns it on, after the ban warning.
+  sending: boolean;
 }
 
-const DEFAULTS: Settings = { keepDays: 30, countryCode: "", alerts: true, voiceWith: "gemini" };
+const DEFAULTS: Settings = { keepDays: 30, countryCode: "", alerts: true, voiceWith: "gemini", sending: false };
 
 function readJson<T>(file: string, fallback: T): T {
   try {
@@ -41,7 +43,7 @@ export function loadSettings(): Settings {
 function cleanSettings(s: Partial<Settings>): Settings {
   const keepDays = KEEP_DAY_CHOICES.includes(Number(s.keepDays)) ? Number(s.keepDays) : DEFAULTS.keepDays;
   const countryCode = String(s.countryCode ?? DEFAULTS.countryCode).replace(/\D/g, "").slice(0, 4);
-  return { keepDays, countryCode, alerts: s.alerts !== false, voiceWith: s.voiceWith === "openai" ? "openai" : "gemini" };
+  return { keepDays, countryCode, alerts: s.alerts !== false, voiceWith: s.voiceWith === "openai" ? "openai" : "gemini", sending: s.sending === true };
 }
 
 export function saveSettings(input: Partial<Settings>): Settings {

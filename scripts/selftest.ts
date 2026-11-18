@@ -129,7 +129,7 @@ saveMedia("n1", "VID1", Buffer.alloc(16 * 1024 * 1024, 7));
 closeStore();
 
 const downloads = join(home, "downloads-test");
-const env = { ...process.env, WA_OFF: "1", WHATSAPP_MCP_NO_BROWSER: "1", WHATSAPP_MCP_NO_ALERTS: "1", WHATSAPP_MCP_DOWNLOADS: downloads } as Record<string, string>;
+const env = { ...process.env, WA_OFF: "1", WHATSAPP_MCP_NO_BROWSER: "1", WHATSAPP_MCP_NO_ALERTS: "1", WHATSAPP_MCP_DOWNLOADS: downloads, WHATSAPP_MCP_FAKE_SEND: "1", WHATSAPP_MCP_SEND_GAP_MS: "400" } as Record<string, string>;
 const open = async () => {
   const client = new Client({ name: "selftest", version: "1" });
   await client.connect(new StdioClientTransport({ command: process.execPath, args: ["dist/stage/dist/index.mjs"], env, stderr: "ignore" }));
@@ -146,8 +146,8 @@ try {
   const a = await open();
 
   const tools = (await a.listTools()).tools.map((t) => t.name).sort();
-  assert.deepEqual(tools, ["connect_whatsapp", "get_image", "list_chats", "open_settings_page", "read_chat", "read_file", "save_file", "save_files", "search", "status", "transcribe_voice", "watch_video"], "tool list");
-  assert.ok(!tools.some((t) => /send|reply|delete/i.test(t)), "no tool can send");
+  assert.deepEqual(tools, ["connect_whatsapp", "get_image", "list_chats", "open_settings_page", "read_chat", "read_file", "save_file", "save_files", "search", "send_message", "status", "transcribe_voice", "watch_video"], "tool list");
+  assert.deepEqual(tools.filter((t) => /send|reply|delete|forward/i.test(t)), ["send_message"], "send_message is the only tool that can send");
   console.log("tools: ok");
 
   assert.match(await text(a, "status"), /test mode/, "status in plain words");
@@ -180,7 +180,7 @@ try {
   const postJson = (p: string, body: unknown) => fetch(`${pbase}${p}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   assert.equal((await fetch(`${pbase}/settings`, { method: "POST", body: "keepDays=7" })).status, 415, "a plain form cannot change settings");
   const saved = await (await postJson("/settings", { keepDays: 14, countryCode: "+65 ", alerts: false })).json();
-  assert.deepEqual(saved, { keepDays: 14, countryCode: "65", alerts: false, voiceWith: "gemini" }, "settings saved and cleaned");
+  assert.deepEqual(saved, { keepDays: 14, countryCode: "65", alerts: false, voiceWith: "gemini", sending: false }, "settings saved and cleaned");
   assert.deepEqual((await (await postJson("/settings", { keepDays: 9999 })).json()).keepDays, 30, "odd keep days fall back");
   assert.equal((await fetch(`${pbase.replace(/[0-9a-f]+$/, "wrongkey")}/info`)).status, 404, "settings page needs its key");
   assert.match(await text(a, "status"), /Kept for: 30 days/, "status uses the saved setting");
@@ -257,6 +257,41 @@ try {
   assert.match(await text(a, "save_files", { chat: "Alan", kind: "video", name: "nothing-like-this" }), /No files like that/);
   console.log("documents: ok");
 
+  const fakeSent = () => {
+    try {
+      return readFileSync(join(home, "fake-sent.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    } catch {
+      return [];
+    }
+  };
+  const sendInfo = async () => (await (await fetch(`${pbase}/info`)).json()).sending;
+  assert.match(await text(a, "send_message", { chat: "Alan", text: "hello from the test" }), /Sending is off, so nothing was sent/, "off by default");
+  assert.match(await text(a, "status"), /Sending: off/, "status says it is off");
+  await postJson("/settings", { sending: true });
+  assert.equal((await sendInfo()).on, false, "the normal settings form cannot turn sending on");
+  assert.equal((await postJson("/sending", { on: true })).status, 400, "turning on needs the ban-risk box");
+  assert.equal((await (await postJson("/sending", { on: true, acceptRisk: true })).json()).on, true, "on after accepting the risk");
+  assert.match(await text(a, "send_message", { chat: "Alan", text: "hello from the test" }), /Queued for Alan Fake/, "queued");
+  assert.match(await text(a, "send_message", { chat: "Nobody Like This", text: "hi" }), /No chat|no chat|not found/i, "only existing chats");
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.deepEqual(fakeSent().map((m) => [m.to, m.text]), [[ALAN, "hello from the test"]], "sent once, to the right chat, with the right text");
+  assert.equal((await sendInfo()).lastDay, 1, "the page counts it");
+  await text(a, "send_message", { chat: "Alan", text: "second" });
+  await text(a, "send_message", { chat: "Alan", text: "third" });
+  await new Promise((r) => setTimeout(r, 2500));
+  const sent = fakeSent();
+  assert.equal(sent.length, 3, "all three sent");
+  assert.ok(sent[2].at - sent[1].at >= 400 && sent[1].at - sent[0].at >= 400, "never two at once: a gap between sends");
+  await text(a, "send_message", { chat: "Alan", text: "fourth" });
+  await text(a, "send_message", { chat: "Alan", text: "fifth" });
+  const stopped = await (await postJson("/sending", { on: false })).json();
+  assert.ok(stopped.cancelled >= 1 && stopped.on === false, "turning off stops what is waiting");
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.ok(!fakeSent().some((m) => m.text === "fifth"), "a stopped message never goes out");
+  assert.match(await text(a, "send_message", { chat: "Alan", text: "after off" }), /Sending is off/, "off again");
+  for (const f of walk(home).filter((p) => !p.endsWith("fake-sent.jsonl"))) assert.ok(!readFileSync(f).includes("hello from the test"), `sent text in plain text in ${f}`);
+  console.log("sending: ok");
+
   const b = await open();
   assert.match(await text(b, "status"), /test mode/);
   assert.equal(helperInfo().pid, pid, "a second copy shares the one helper");
@@ -283,7 +318,7 @@ try {
   env.WHATSAPP_MCP_FORCE_INPROCESS = "1";
   const c = await open();
   assert.match(await text(c, "search", { query: "invoice" }), /1 match/, "works with the helper inside the MCP process");
-  assert.equal((await c.listTools()).tools.length, 12);
+  assert.equal((await c.listTools()).tools.length, 13);
   await c.close();
   await new Promise((r) => setTimeout(r, 800));
   delete env.WHATSAPP_MCP_FORCE_INPROCESS;

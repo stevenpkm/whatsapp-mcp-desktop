@@ -1,9 +1,9 @@
 {
   "manifest_version": "0.3",
   "name": "whatsapp-mcp-desktop",
-  "display_name": "WhatsApp (read only)",
-  "version": "1.4.0",
-  "description": "Let Claude read and search your own WhatsApp. It never sends a message. Everything stays on this computer.",
+  "display_name": "WhatsApp MCP",
+  "version": "1.5.0",
+  "description": "Let Claude read and search your own WhatsApp. Read only by default; sending is off unless you turn it on. Everything stays on this computer.",
   "author": { "name": "whatsapp-mcp-desktop contributors" },
   "license": "MIT",
   "server": {
@@ -25,6 +25,7 @@
     { "name": "transcribe_voice", "description": "Turn a voice note into text (with your Gemini or OpenAI key)" },
     { "name": "watch_video", "description": "Describe a video and its speech (with your Gemini key)" },
     { "name": "read_file", "description": "Read the text inside a PDF or text file from a message" },
+    { "name": "send_message", "description": "Send a text message (off by default, turn on in settings)" },
     { "name": "save_file", "description": "Save a file from a message to Downloads" },
     { "name": "save_files", "description": "Save every file of a chat to Downloads at once" }
   ],

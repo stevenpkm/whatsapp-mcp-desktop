@@ -1,6 +1,6 @@
 # WhatsApp MCP
 
-Let Claude read your own WhatsApp: summaries, search, pictures, voice notes and videos. It never sends a message. Your messages stay on your computer, encrypted.
+Let Claude read your own WhatsApp: summaries, search, pictures, documents, voice notes and videos. Read only by default; sending is an option you turn on yourself, at your own risk. Your messages stay on your computer, encrypted.
 
 [中文说明](README.zh.md)
 
@@ -49,6 +49,7 @@ Back in Claude, ask: **summarize my WhatsApp today**
 | What's in the picture Ahmad sent? | Looks at the picture |
 | What did Ahmad say in his voice note? | Turns the voice note into text (needs a key, see below) |
 | What's in the video Mei sent? | Describes the video and what is said (needs a Gemini key) |
+| Reply to Ahmad: OK, noted | Shows you the message, waits for your OK, then sends it slowly (only if you turned sending on) |
 | What's the total on the invoice Ahmad sent? | Reads the text inside the PDF |
 | Save that PDF | Saves it to Downloads > WhatsApp MCP |
 | Save all the invoices from the Supplier group | Saves every matching file of that chat into one folder |
@@ -79,6 +80,22 @@ And lets you change:
 - **Keep messages for**: 7, 14, 30 (default) or 90 days. Older messages are deleted automatically.
 - **Country code**: for local numbers that start with 0 (60 for Malaysia, 65 for Singapore, 44 for the UK). Leave it empty if you always use full numbers.
 - **Disconnect alerts**: a desktop alert when WhatsApp is down for 3 minutes, or needs a new scan. Press **Test alert** to see one.
+
+## Sending messages (optional, off by default)
+
+Out of the box Claude can only read. If you want Claude to send WhatsApp messages for you, turn it on yourself:
+
+1. Open the settings page (say **open the WhatsApp settings page**).
+2. Under **Sending**, press **Turn on sending**.
+3. Read the warning, tick the box, press **Turn on sending**.
+
+**Read before you turn it on:**
+- **Your number can be banned.** WhatsApp does not allow unofficial apps to send messages. A ban can be temporary or permanent. You use this at your own risk.
+- Tips to lower the risk (they do not stop a ban): send slowly, a few messages at a time; only message people who know you; no bulk, promo or the same text to many people; use a second number; stop if people block you or WhatsApp warns you.
+- The app also holds back on its own: one message at a time with a pause and "typing..." before each, and a cap per hour and per day. That is a brake, not a promise of safety.
+- Only to chats you already have, text only.
+- Claude must show you each message and the chat, and send only after your OK. Messages from other people can try to trick Claude into sending; never approve one you did not ask for.
+- The settings page shows every message: waiting, sent or failed. **Turn off** stops everything still waiting.
 
 ## Voice notes and videos (optional)
 
@@ -124,7 +141,7 @@ Claude can read the log at `<your user folder>/WhatsApp MCP/helper.log` to expla
 
 ## Good to know
 
-- **Not official.** It connects the way WhatsApp Web does (a linked device). WhatsApp does not allow unofficial apps, so a number can be banned. Read only is lower risk, but not zero. Use a second number if you can.
+- **Not official.** It connects the way WhatsApp Web does (a linked device). WhatsApp does not allow unofficial apps, so a number can be banned. Read only (the default) is lower risk, but not zero; turning on sending raises it. Use a second number if you can.
 - **Messages are written by other people.** Claude is told never to follow instructions found in a message. Still, don't ask Claude to act on what a message says without checking it yourself.
 - **Only link your own number.**
 - **When it receives messages.** Installed in Claude Desktop: while Claude is open. Installed with Claude Code: in the background until the computer shuts down. After a gap, only recent messages come back.
@@ -135,7 +152,7 @@ Claude can read the log at `<your user folder>/WhatsApp MCP/helper.log` to expla
 ## Remove it
 
 1. Phone: WhatsApp > Linked devices > tap **WhatsApp MCP** > Log out
-2. Claude > Settings > Extensions > remove **WhatsApp (read only)**. Claude Code: `claude mcp remove whatsapp`
+2. Claude > Settings > Extensions > remove **WhatsApp MCP**. Claude Code: `claude mcp remove whatsapp`
 3. Delete the folder `<your user folder>/WhatsApp MCP`
 
 ## For developers

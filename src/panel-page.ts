@@ -21,6 +21,8 @@ const ICON: Record<string, string> = {
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   qr: '<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>',
   bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+  warn: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
 };
 const icon = (name: string, size = 18) =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name]}</svg>`;
@@ -129,7 +131,31 @@ export function panelPage(): string {
 
   .path { overflow-wrap: anywhere; }
 
+  .val { font-weight: 600; color: var(--ink-2); text-align: right; }
+  .tips { background: var(--panel); border-radius: 16px; padding: 14px 16px; margin: 4px 0 6px; font-size: 14px; }
+  .tips b { display: block; margin-bottom: 6px; }
+  .tips ul { list-style: disc; padding-left: 18px; margin: 0; color: var(--ink-2); }
+  .tips li { display: list-item; border: 0; padding: 2px 0; }
+  .tips p { margin: 8px 0 0; font-weight: 700; color: var(--bad); }
+  .tips + .set { border-top: 0; }
+  .chip.risk { background: var(--bad-soft); color: var(--bad); }
+  .providers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px; }
+  .providers .provider { border-top: 0; padding-top: 0; }
+  .rules { margin: 10px 0 16px; padding-left: 18px; color: var(--ink-2); font-size: 14px; list-style: disc; }
+  .rules li { display: list-item; border: 0; padding: 2px 0; grid-template-columns: none; }
+  dialog { margin: auto; border: 0; border-radius: 24px; padding: 28px; max-width: 520px; width: calc(100% - 32px); color: var(--ink); box-shadow: 0 24px 60px rgba(16, 32, 28, 0.25); }
+  dialog::backdrop { background: rgba(14, 42, 36, 0.45); }
+  dialog h3 { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 12px; }
+  dialog h3 svg { color: var(--bad); }
+  dialog ul.rules li { padding: 4px 0; }
+  .accept { display: flex; gap: 10px; align-items: flex-start; background: var(--bad-soft); border-radius: 14px; padding: 12px 14px; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .accept input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--bad); flex: none; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .danger { background: var(--bad); color: #fff; } .danger:hover { background: #a51b1b; }
+
   @media (max-width: 1100px) {
+    .providers { grid-template-columns: minmax(0, 1fr); }
+    .providers .provider + .provider { border-top: 1px solid var(--line); padding-top: 16px; }
     .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .span-2, .span-3, .span-4 { grid-column: span 2; }
     .stat { grid-column: span 1; }
@@ -148,7 +174,7 @@ export function panelPage(): string {
   <header>
     <div class="logo">${icon("logo", 22)}</div>
     <h1>WhatsApp MCP</h1>
-    <span class="pill">Read only</span>
+    <span class="pill" id="modePill">Read only</span>
     <span class="ver" id="ver"></span>
   </header>
 
@@ -207,7 +233,46 @@ export function panelPage(): string {
     </section>
 
     <section class="card span-3">
+      <p class="label">${icon("sliders")} Settings</p>
+      <form id="form">
+        <label class="set"><span><b>Keep messages for</b></span>
+          <select name="keepDays"><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label>
+        <label class="set"><span><b>Country code</b><small>For local numbers starting with 0</small></span>
+          <span class="cc">+<input type="text" name="countryCode" inputmode="numeric" maxlength="4"></span></label>
+        <label class="set"><span><b>Disconnect alerts</b><small>After <span id="alertMin">3</span> min down, or when a new scan is needed</small></span>
+          <span class="switch"><input type="checkbox" name="alerts"><span></span></span></label>
+        <div class="save-row">
+          <span id="saved" class="msg"></span>
+          <button type="button" id="testAlert" class="secondary">${icon("bell", 16)} Test alert</button>
+          <button type="submit" id="saveBtn" class="primary" disabled>Save</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card span-3" id="sendCard">
+      <p class="label">${icon("send")} Sending</p>
+      <div class="set"><span><b>Send messages</b><small id="sendHint">Off: Claude can only read</small></span>
+        <span class="row-actions"><span class="chip" id="sendChip">Off</span><button type="button" id="sendOn" class="secondary">Turn on</button><button type="button" id="sendOff" class="secondary" hidden>Turn off</button></span></div>
+      <div class="tips">
+        <b>If you send, keep it safe</b>
+        <ul>
+          <li>Send slowly, a few messages at a time, not many in a row</li>
+          <li>Only message people who know you</li>
+          <li>No bulk, promo or the same text to many people</li>
+          <li>Use a second number, not your main one</li>
+          <li>Stop if people block you or WhatsApp warns you</li>
+        </ul>
+        <p>These lower the risk. They do not stop a ban.</p>
+      </div>
+      <div class="set"><span><b>Sent today</b></span><span class="val num" id="sentDay">0</span></div>
+      <div class="set" id="waitRow" hidden><span><b>Waiting to send</b></span>
+        <span class="row-actions"><span class="val num" id="waiting">0</span><button type="button" id="clearQueue" class="secondary">Stop</button></span></div>
+      <p class="note"><span id="sendMsg" class="msg"></span></p>
+    </section>
+
+    <section class="card" style="grid-column: 1 / -1">
       <p class="label">${icon("mic")} Voice notes and videos</p>
+      <div class="providers">
       <div class="provider">
         <div class="key-state"><b>Google Gemini</b><span class="tag">Voice notes and videos</span><span class="chip" id="geminiChip">Off</span></div>
         <form id="geminiForm" class="field">
@@ -226,29 +291,29 @@ export function panelPage(): string {
         </form>
         <p class="note"><a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Get a key</a>. <span id="openaiMsg" class="msg"></span></p>
       </div>
+      </div>
       <label class="set voice-with" id="voiceWithRow" hidden><span><b>Voice notes with</b></span>
         <select id="voiceWith"><option value="gemini">Gemini</option><option value="openai">OpenAI</option></select></label>
       <p class="note">Only the file you ask about is sent, and each answer is kept so asking again is free.</p>
     </section>
-
-    <section class="card span-3">
-      <p class="label">${icon("sliders")} Settings</p>
-      <form id="form">
-        <label class="set"><span><b>Keep messages for</b></span>
-          <select name="keepDays"><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label>
-        <label class="set"><span><b>Country code</b><small>For local numbers starting with 0</small></span>
-          <span class="cc">+<input type="text" name="countryCode" inputmode="numeric" maxlength="4"></span></label>
-        <label class="set"><span><b>Disconnect alerts</b><small>After <span id="alertMin">3</span> min down, or when a new scan is needed</small></span>
-          <span class="switch"><input type="checkbox" name="alerts"><span></span></span></label>
-        <div class="save-row">
-          <span id="saved" class="msg"></span>
-          <button type="button" id="testAlert" class="secondary">${icon("bell", 16)} Test alert</button>
-          <button type="submit" id="saveBtn" class="primary" disabled>Save</button>
-        </div>
-      </form>
-    </section>
   </div>
 </div>
+
+<dialog id="riskDialog">
+  <h3>${icon("warn", 22)} Turn on sending?</h3>
+  <p style="margin: 0 0 6px">Read this first:</p>
+  <ul class="rules">
+    <li><b>Your number can be banned.</b> WhatsApp does not allow unofficial apps to send messages. A ban can be temporary or permanent.</li>
+    <li>Sending slowly lowers the risk but never removes it. Do not use it for bulk or marketing messages.</li>
+    <li>Claude must show you each message and get your OK before sending.</li>
+    <li>Messages from other people can try to trick Claude into sending. Never approve a message you did not ask for.</li>
+  </ul>
+  <label class="accept"><input type="checkbox" id="acceptRisk"> I understand my number can be banned, and I use sending at my own risk.</label>
+  <div class="dialog-actions">
+    <button type="button" id="riskCancel" class="secondary">Cancel</button>
+    <button type="button" id="riskConfirm" class="danger" disabled>Turn on sending</button>
+  </div>
+</dialog>
 <script>
   const base = location.pathname.replace(/\\/panel\\/?$/, "");
   const $ = (id) => document.getElementById(id);
@@ -305,6 +370,17 @@ export function panelPage(): string {
     $("oldest").textContent = s.oldest ? when(s.oldest) : "-";
     $("home").textContent = s.home;
     $("alertMin").textContent = s.alertAfterMin;
+
+    const snd = s.sending;
+    $("modePill").textContent = snd.on ? "Sending on" : "Read only";
+    $("sendChip").textContent = snd.on ? "On, at your own risk" : "Off";
+    $("sendChip").className = "chip" + (snd.on ? " risk" : "");
+    $("sendHint").textContent = snd.on ? "Only after you say OK to each message" : "Off: Claude can only read";
+    $("sendOn").hidden = snd.on;
+    $("sendOff").hidden = !snd.on;
+    $("sentDay").textContent = snd.lastDay;
+    $("waitRow").hidden = !snd.queued;
+    $("waiting").textContent = snd.queued;
 
     for (const name of ["gemini", "openai"]) {
       const hint = s[name + "Key"];
@@ -402,6 +478,27 @@ export function panelPage(): string {
       flash("saved", "Saved");
       tick();
     } else flash("saved", "Could not save", true);
+  });
+  const dlg = $("riskDialog");
+  $("sendOn").addEventListener("click", () => { $("acceptRisk").checked = false; $("riskConfirm").disabled = true; dlg.showModal(); });
+  $("acceptRisk").addEventListener("change", () => ($("riskConfirm").disabled = !$("acceptRisk").checked));
+  $("riskCancel").addEventListener("click", () => dlg.close());
+  $("riskConfirm").addEventListener("click", async () => {
+    const r = await post("/sending", { on: true, acceptRisk: $("acceptRisk").checked });
+    dlg.close();
+    flash("sendMsg", r.ok ? "Sending is on" : "Could not turn it on", !r.ok);
+    tick();
+  });
+  $("sendOff").addEventListener("click", async () => {
+    const r = await post("/sending", { on: false });
+    const out = await r.json().catch(() => ({}));
+    flash("sendMsg", "Sending is off" + (out.cancelled ? ", " + out.cancelled + " waiting stopped" : ""));
+    tick();
+  });
+  $("clearQueue").addEventListener("click", async () => {
+    const out = await (await post("/outbox-clear")).json().catch(() => ({}));
+    flash("sendMsg", (out.cancelled || 0) + " stopped");
+    tick();
   });
   $("testAlert").addEventListener("click", async () => {
     await post("/test-alert");

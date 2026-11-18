@@ -1,6 +1,6 @@
 # WhatsApp MCP
 
-让 Claude 读你自己的 WhatsApp：帮你总结、找讯息、看图片、听语音、看 video。它不会帮你发任何讯息。讯息只存在你自己的电脑，而且是加密的。
+让 Claude 读你自己的 WhatsApp：帮你总结、找讯息、看图片、读文件、听语音、看 video。默认只读；要发讯息的话，要你自己打开，风险自负。讯息只存在你自己的电脑，而且是加密的。
 
 [English](README.md)
 
@@ -49,6 +49,7 @@ QR 大约 20 秒会自己换一次，不用 refresh。页面写 **Connected** �
 | Ahmad 发的那张图是什么？ | 看那张图 |
 | Ahmad 的语音讲什么？ | 把语音转成文字 (要 key，看下面) |
 | Mei 发的 video 是什么？ | 讲 video 里面有什么、讲了什么 (要 Gemini key) |
+| 回 Ahmad：OK, noted | 先给你看讯息，等你 OK，才慢慢发出去 (要先打开发讯息功能) |
 | Ahmad 发的 invoice 总数多少？ | 读 PDF 里面的字 |
 | 把那个 PDF 存起来 | 存去 Downloads > WhatsApp MCP |
 | 把 Supplier group 所有 invoice 存起来 | 那个 chat 符合的 file 全部存进同一个 folder |
@@ -79,6 +80,22 @@ QR 大约 20 秒会自己换一次，不用 refresh。页面写 **Connected** �
 - **Keep messages for**：存 7、14、30 (默认) 或 90 天。更旧的会自动删掉。
 - **Country code**：讲 0 开头的号码时用 (马来西亚 60、新加坡 65、英国 44)。都用完整号码的话可以留空。
 - **Disconnect alerts**：断线 3 分钟还没连回去，或者要重新扫码，电脑会跳通知。按 **Test alert** 可以先看看。
+
+## 发讯息 (可以不用，默认关着)
+
+装好之后，Claude 只能读。要 Claude 帮你发 WhatsApp 讯息的话，要你自己打开：
+
+1. 打开设定页 (跟 Claude 讲 **开 WhatsApp 设定页**)。
+2. 在 **Sending** 那里按 **Turn on sending**。
+3. 看完警告，打勾，再按 **Turn on sending**。
+
+**打开之前先看清楚：**
+- **你的号码有机会被封。** WhatsApp 不准非官方的程序发讯息。可能封几天，也可能永久封。风险自负。
+- 降低风险的建议 (照做也不保证不会被封)：慢慢发，一次几个就好；只发给认识你的人；不要大量发、不要发广告、不要同一段字发给很多人；用副号；有人 block 你或 WhatsApp 警告你就停。
+- 程序自己也会放慢：一次一个，每个之间会停一下，发之前先 "typing..."，每个钟头和每天也有上限。这只是刹车，不是保证安全。
+- 只能发给你本来就有的 chat，只能发文字。
+- Claude 每次都要先给你看讯息和发给谁，你 OK 了才发。别人的讯息可能会想骗 Claude 帮它发东西，不是你要发的，不要按 OK。
+- 设定页看得到每个讯息：等着发、发了、还是失败。按 **Turn off** 会停掉所有还没发的。
 
 ## 语音和 video (可以不用)
 
@@ -124,7 +141,7 @@ QR 大约 20 秒会自己换一次，不用 refresh。页面写 **Connected** �
 
 ## 先知道
 
-- **不是官方的。** 它用 WhatsApp Web 一样的方式连 (linked device)。WhatsApp 不准非官方的程序，号码有机会被封。只读的风险比较低，但不是零。能用副号就用副号。
+- **不是官方的。** 它用 WhatsApp Web 一样的方式连 (linked device)。WhatsApp 不准非官方的程序，号码有机会被封。只读 (默认) 的风险比较低，但不是零；打开发讯息风险会更高。能用副号就用副号。
 - **讯息是别人写的。** Claude 被规定不能照讯息里面的指示做事。不过讯息叫你做什么之前，还是自己先看清楚。
 - **只连你自己的号码。**
 - **几时收讯息。** 用 Claude Desktop 装的：Claude 开着才收。用 Claude Code 装的：在背后一直收，电脑关机才停。中间断掉的话，只补得回最近的讯息。
@@ -135,7 +152,7 @@ QR 大约 20 秒会自己换一次，不用 refresh。页面写 **Connected** �
 ## 删除
 
 1. 手机：WhatsApp > Linked devices > 点 **WhatsApp MCP** > Log out
-2. Claude > Settings > Extensions > 删掉 **WhatsApp (read only)**。Claude Code：`claude mcp remove whatsapp`
+2. Claude > Settings > Extensions > 删掉 **WhatsApp MCP**。Claude Code：`claude mcp remove whatsapp`
 3. 删掉 `你的用户 folder/WhatsApp MCP` 这个 folder
 
 ## 给开发的人

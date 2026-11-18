@@ -30,6 +30,7 @@ import { addEvent, ALERT_AFTER_MS, listEvents, loadSettings, notify, saveSetting
 import { panelPage } from "./panel-page.js";
 import { geminiKeyHint, pruneMediaText, saveGeminiKey } from "./gemini.js";
 import { openaiKeyHint, saveOpenAIKey } from "./openai.js";
+import { cancelAll, counts, initSender, LIMITS } from "./sender.js";
 import { AUTH_DIR, DATA_DIR, HELPER_FILE, HOME, LOCK_FILE, LOG_FILE, readHelperInfo, loadSecrets, VERSION } from "./paths.js";
 import { linkPage } from "./link-page.js";
 
@@ -102,6 +103,7 @@ function start() {
   setRetentionDays(settings.keepDays);
   setCountryCode(settings.countryCode);
   addEvent("helper_started");
+  initSender(() => settings.sending);
 
   // A drop that fixes itself within a few minutes (sleep, a wifi blip) is
   // normal. Alert only when it lasts, or when a new scan is needed.
@@ -246,6 +248,7 @@ function start() {
       settings,
       geminiKey: geminiKeyHint(),
       openaiKey: openaiKeyHint(),
+      sending: { on: settings.sending, limits: LIMITS, ...counts() },
       events: listEvents(),
       home: HOME,
       alertAfterMin: ALERT_AFTER_MS / 60_000,
@@ -288,6 +291,23 @@ function start() {
     } catch (e: any) {
       res.status(400).json({ error: e?.message || "could not save the key" });
     }
+  });
+
+  // Turning sending on needs the person to tick the ban-risk box on the page.
+  app.post("/link/:key/sending", pageGuard, needJson, jsonBody, (req, res) => {
+    const on = req.body?.on === true;
+    if (on && req.body?.acceptRisk !== true) {
+      res.status(400).json({ error: "Tick the box to accept the ban risk first." });
+      return;
+    }
+    settings = saveSettings({ sending: on });
+    const cancelled = on ? 0 : cancelAll();
+    console.log(`[helper] sending turned ${on ? "on" : "off"}`);
+    res.json({ on: settings.sending, cancelled });
+  });
+
+  app.post("/link/:key/outbox-clear", pageGuard, needJson, (_req, res) => {
+    res.json({ cancelled: cancelAll() });
   });
 
   app.post("/link/:key/reconnect", pageGuard, needJson, (_req, res) => {
