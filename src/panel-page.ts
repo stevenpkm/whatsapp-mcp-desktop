@@ -399,6 +399,7 @@ export function panelPage(): string {
       let text = "", bad = false;
       if (e.kind === "connected") text = "Connected";
       else if (e.kind === "helper_started") text = "Started (Claude opened or computer restarted)";
+      else if (e.kind === "caught_up") text = "Caught up " + e.n + " message" + (e.n === 1 ? "" : "s") + " from while it was off";
       else {
         const back = ev.slice(i + 1).find((x) => x.kind === "connected");
         const dur = back ? back.at - e.at : (s.status === "connected" ? 0 : now - e.at);

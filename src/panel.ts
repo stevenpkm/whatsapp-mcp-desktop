@@ -52,11 +52,13 @@ export function saveSettings(input: Partial<Settings>): Settings {
   return s;
 }
 
-export type EventKind = "connected" | "disconnected" | "logged_out" | "helper_started";
+export type EventKind = "connected" | "disconnected" | "logged_out" | "helper_started" | "caught_up";
 export interface ConnEvent {
   at: number;
   kind: EventKind;
   code?: number;
+  // caught_up: how many messages that arrived while it was off came in.
+  n?: number;
 }
 
 let events: ConnEvent[] | null = null;
@@ -66,10 +68,13 @@ export function listEvents(): ConnEvent[] {
   return events;
 }
 
-export function addEvent(kind: EventKind, code?: number): void {
+export function addEvent(kind: EventKind, code?: number, n?: number): void {
   const cutoff = Date.now() - EVENTS_DAYS * 86_400_000;
   const list = listEvents().filter((e) => e.at >= cutoff);
-  list.push(code === undefined ? { at: Date.now(), kind } : { at: Date.now(), kind, code });
+  const e: ConnEvent = { at: Date.now(), kind };
+  if (code !== undefined) e.code = code;
+  if (n !== undefined) e.n = n;
+  list.push(e);
   events = list.slice(-EVENTS_KEEP);
   try {
     writeFileSync(EVENTS_FILE, JSON.stringify(events));

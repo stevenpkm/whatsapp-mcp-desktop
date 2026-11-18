@@ -66,6 +66,24 @@ const RECONNECT_DELAYS = [3_000, 10_000, 30_000, 60_000, 120_000, 300_000, 900_0
 const MAX_FAST_RECONNECT_STREAK = 3;
 const MAX_REPLACED_ATTEMPTS = 4;
 const STABLE_AFTER_MS = 60_000;
+// "Connected" is not proof: a socket can stay open while WhatsApp stops
+// answering, and then nothing comes in. Ask it something small now and then.
+const HEALTH_FIRST_MS = 90_000;
+const HEALTH_EVERY_MS = 5 * 60_000;
+const HEALTH_TIMEOUT_MS = 20_000;
+// A damaged saved login keeps closing with "bad session". After a few in a
+// row, a new scan is the only fix, so say so instead of looping.
+const BAD_SESSION_LIMIT = 3;
+const BAD_SESSION_WINDOW_MS = 2 * 3_600_000;
+// On connect the library holds every incoming event until WhatsApp says all
+// missed messages are delivered. With a big backlog it asks for one batch of
+// 100 only, that signal never comes, and nothing reaches the database (seen in
+// a real log: 105 messages held for 5 minutes). Ask for the next batches, and
+// if events are still held, release them.
+const HOLD_CHECK_MS = 10_000;
+const HOLD_ASK_AFTER_MS = 15_000;
+const HOLD_MAX_ASKS = 10;
+const HOLD_RELEASE_AFTER_MS = 60_000;
 const WATCHDOG_INTERVAL_MS = 60_000;
 
 let stopping = false;
@@ -125,6 +143,10 @@ export class Session {
   private fastReconnectStreak = 0;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private stableTimer: NodeJS.Timeout | null = null;
+  private healthTimer: NodeJS.Timeout | null = null;
+  private holdTimer: NodeJS.Timeout | null = null;
+  private healthFails = 0;
+  private badSessions: number[] = [];
 
   constructor(
     readonly id: string,
@@ -140,6 +162,68 @@ export class Session {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.healthTimer) {
+      clearTimeout(this.healthTimer);
+      this.healthTimer = null;
+    }
+    if (this.holdTimer) {
+      clearInterval(this.holdTimer);
+      this.holdTimer = null;
+    }
+  }
+
+  private watchHeldEvents(sock: WASocket, myEpoch: number) {
+    if (this.holdTimer) clearInterval(this.holdTimer);
+    const openedAt = Date.now();
+    let asks = 0;
+    this.holdTimer = setInterval(() => {
+      const stop = () => {
+        if (this.holdTimer) clearInterval(this.holdTimer);
+        this.holdTimer = null;
+      };
+      if (myEpoch !== this.epoch || !sock.ev.isBuffering()) return stop();
+      const age = Date.now() - openedAt;
+      if (age >= HOLD_RELEASE_AFTER_MS) {
+        console.warn(`[vault ${this.id}] incoming messages were still held after ${Math.round(age / 1000)}s, releasing them`);
+        sock.ev.flush();
+        return stop();
+      }
+      if (age >= HOLD_ASK_AFTER_MS && asks < HOLD_MAX_ASKS) {
+        asks += 1;
+        this.log(`messages still held, asking WhatsApp for the next batch (${asks})`);
+        sock.sendNode({ tag: "ib", attrs: {}, content: [{ tag: "offline_batch", attrs: { count: "100" } }] }).catch(() => {});
+      }
+    }, HOLD_CHECK_MS);
+    this.holdTimer.unref();
+  }
+
+  // Asks WhatsApp whether our own number exists. Two failures in a row mean
+  // the open socket is dead: drop it and connect again.
+  private scheduleHealth(sock: WASocket, myEpoch: number, delay: number) {
+    if (this.healthTimer) clearTimeout(this.healthTimer);
+    this.healthTimer = setTimeout(async () => {
+      this.healthTimer = null;
+      if (myEpoch !== this.epoch || this.status !== "connected" || stopping) return;
+      const me = (this.meJid || "").split(":")[0].split("@")[0];
+      let ok = false;
+      try {
+        ok = !!me && Array.isArray(await Promise.race([sock.onWhatsApp(me), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), HEALTH_TIMEOUT_MS))]));
+      } catch {
+        ok = false;
+      }
+      if (myEpoch !== this.epoch) return;
+      this.healthFails = ok ? 0 : this.healthFails + 1;
+      if (this.healthFails >= 2) {
+        this.healthFails = 0;
+        console.warn(`[vault ${this.id}] connected but WhatsApp is not answering, reconnecting`);
+        safe("status", () => hooks?.status?.(this.id, "disconnected", 408));
+        this.status = "disconnected";
+        this.lastDisconnectedAt = Date.now();
+        this.start().catch((e) => console.error(`[vault ${this.id}] reconnect failed:`, e?.message || e));
+        return;
+      }
+      this.scheduleHealth(sock, myEpoch, ok ? HEALTH_EVERY_MS : 30_000);
+    }, delay);
   }
 
   // Watchdog: not connected, not waiting for a scan by design, and nothing scheduled.
@@ -257,6 +341,9 @@ export class Session {
             }
           }, STABLE_AFTER_MS);
           this.log(`connected (epoch ${myEpoch})`);
+          this.healthFails = 0;
+          this.scheduleHealth(sock, myEpoch, HEALTH_FIRST_MS);
+          this.watchHeldEvents(sock, myEpoch);
           safe("status", () => hooks?.status?.(id, "connected"));
           // Group names, once per connection.
           setTimeout(() => {
@@ -297,6 +384,19 @@ export class Session {
       console.warn(`[vault ${this.id}] HARD STOP (code ${code}): reset this number and scan again`);
       safe("status", () => hooks?.status?.(this.id, "logged_out", code));
       return;
+    }
+    if (code === DisconnectReason.badSession) {
+      const now = Date.now();
+      this.badSessions = this.badSessions.filter((t) => t > now - BAD_SESSION_WINDOW_MS).concat(now);
+      if (this.badSessions.length >= BAD_SESSION_LIMIT) {
+        this.status = "logged_out";
+        this.badSessions = [];
+        this.reconnectAttempt = 0;
+        this.fastReconnectStreak = 0;
+        console.warn(`[vault ${this.id}] saved login looks damaged (bad session ${BAD_SESSION_LIMIT}x): scan again`);
+        safe("status", () => hooks?.status?.(this.id, "logged_out", code));
+        return;
+      }
     }
     if (code === DisconnectReason.connectionReplaced && this.reconnectAttempt >= MAX_REPLACED_ATTEMPTS) {
       this.status = "logged_out";

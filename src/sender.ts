@@ -28,6 +28,8 @@ export interface OutItem {
   label: string;
   text: string;
   status: OutStatus;
+  // A number with no chat here yet: check it is on WhatsApp before sending.
+  newNumber?: boolean;
   queuedAt: number;
   doneAt?: number;
   error?: string;
@@ -63,7 +65,7 @@ export function counts(): { lastHour: number; lastDay: number; queued: number } 
 }
 
 // Puts a message in the line. Throws with a plain reason when it cannot.
-export function enqueue(numberId: string, chatJid: string, label: string, text: string): { item: OutItem; ahead: number; etaSec: number } {
+export function enqueue(numberId: string, chatJid: string, label: string, text: string, newNumber = false): { item: OutItem; ahead: number; etaSec: number } {
   if (!isOn()) throw new Error("Sending is off. The person can turn it on on the settings page (open_settings_page), at their own risk.");
   const body = text.trim();
   if (!body) throw new Error("The message is empty.");
@@ -71,7 +73,7 @@ export function enqueue(numberId: string, chatJid: string, label: string, text: 
   const c = counts();
   if (c.lastHour + c.queued >= LIMITS.perHour) throw new Error(`Hourly limit reached (${LIMITS.perHour} messages an hour, to keep the number safe). Try again later.`);
   if (c.lastDay + c.queued >= LIMITS.perDay) throw new Error(`Daily limit reached (${LIMITS.perDay} messages a day, to keep the number safe). Try again tomorrow.`);
-  const item: OutItem = { id: crypto.randomBytes(4).toString("hex"), numberId, chatJid, label, text: body, status: "queued", queuedAt: Date.now() };
+  const item: OutItem = { id: crypto.randomBytes(4).toString("hex"), numberId, chatJid, label, text: body, status: "queued", queuedAt: Date.now(), ...(newNumber ? { newNumber } : {}) };
   outbox.push(item);
   if (outbox.length > 100) outbox.splice(0, outbox.length - 100);
   const ahead = c.queued;
@@ -112,6 +114,11 @@ async function deliver(o: OutItem): Promise<void> {
     session = getSession(o.numberId);
   }
   const sock = session.sock;
+  if (o.newNumber) {
+    const [hit] = (await sock.onWhatsApp(o.chatJid.split("@")[0])) || [];
+    if (!hit?.exists) throw new Error("this number is not on WhatsApp");
+    o.chatJid = hit.jid;
+  }
   // A few seconds of "typing...", longer for longer messages, like a person.
   try {
     await sock.sendPresenceUpdate("composing", o.chatJid);

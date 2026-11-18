@@ -282,6 +282,12 @@ try {
   const sent = fakeSent();
   assert.equal(sent.length, 3, "all three sent");
   assert.ok(sent[2].at - sent[1].at >= 400 && sent[1].at - sent[0].at >= 400, "never two at once: a gap between sends");
+  assert.match(await text(a, "send_message", { chat: "+60 12-000 5678", text: "new number" }), /Queued for \+60120005678/, "a full number with no chat yet can be messaged");
+  assert.match(await text(a, "send_message", { chat: "012-000 9999", text: "local number" }), /Queued for \+60120009999/, "a local number gets the country code");
+  assert.match(await text(a, "send_message", { chat: "12", text: "x" }), /no chat matches|does not look like/i, "not a number, not a chat: refused");
+  await new Promise((r) => setTimeout(r, 2000));
+  const toNew = fakeSent().filter((m) => m.text === "new number" || m.text === "local number").map((m) => m.to).sort();
+  assert.deepEqual(toNew, ["60120005678@s.whatsapp.net", "60120009999@s.whatsapp.net"], "sent to the new numbers");
   await text(a, "send_message", { chat: "Alan", text: "fourth" });
   await text(a, "send_message", { chat: "Alan", text: "fifth" });
   const stopped = await (await postJson("/sending", { on: false })).json();

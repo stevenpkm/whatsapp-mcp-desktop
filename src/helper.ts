@@ -12,6 +12,7 @@
 //   POST /mcp               MCP, stateless (auth)
 //   POST /quit              stop this helper (auth), used on an update
 
+import "./quiet-console.js";
 import crypto from "crypto";
 import express from "express";
 import qrcode from "qrcode";
@@ -132,7 +133,29 @@ function start() {
       alertTimer.unref();
     }
   }
-  setHooks({ message: ingest, contacts: ingestContacts, groups: ingestGroups, linked: ingestLinked, status: onStatus });
+  // Messages sent while this was off come in right after it connects again.
+  // Count them for the history, so a gap that was caught up is visible.
+  let catchUp: { since: number; n: number; timer: NodeJS.Timeout } | null = null;
+  const CATCH_UP_MS = 120_000;
+  function startCatchUp() {
+    if (catchUp) clearTimeout(catchUp.timer);
+    const c = { since: Date.now(), n: 0, timer: setTimeout(() => {
+      if (c.n) addEvent("caught_up", undefined, c.n);
+      console.log(`[helper] caught up ${c.n} message(s) from while it was off`);
+      if (catchUp === c) catchUp = null;
+    }, CATCH_UP_MS) };
+    c.timer.unref();
+    catchUp = c;
+  }
+  const countingIngest: typeof ingest = (numberId, m, history) => {
+    const ts = Number(m.messageTimestamp || 0) * 1000;
+    if (catchUp && !history && ts && ts < catchUp.since - 5_000) catchUp.n += 1;
+    return ingest(numberId, m, history);
+  };
+  setHooks({ message: countingIngest, contacts: ingestContacts, groups: ingestGroups, linked: ingestLinked, status: (id, status, code) => {
+    if (status === "connected") startCatchUp();
+    onStatus(id, status, code);
+  } });
   initNumbers({ authRoot: AUTH_DIR, run: !WA_OFF, max: 1 });
 
   const runPrune = () => {

@@ -93,7 +93,7 @@ Out of the box Claude can only read. If you want Claude to send WhatsApp message
 - **Your number can be banned.** WhatsApp does not allow unofficial apps to send messages. A ban can be temporary or permanent. You use this at your own risk.
 - Tips to lower the risk (they do not stop a ban): send slowly, a few messages at a time; only message people who know you; no bulk, promo or the same text to many people; use a second number; stop if people block you or WhatsApp warns you.
 - The app also holds back on its own: one message at a time with a pause and "typing..." before each, and a cap per hour and per day. That is a brake, not a promise of safety.
-- Only to chats you already have, text only.
+- To a chat you have, or to any phone number on WhatsApp (write it with the country code, like +60...). Text only. A new number is checked to be on WhatsApp first.
 - Claude must show you each message and the chat, and send only after your OK. Messages from other people can try to trick Claude into sending; never approve one you did not ask for.
 - The settings page shows every message: waiting, sent or failed. **Turn off** stops everything still waiting.
 
@@ -116,6 +116,19 @@ Good to know:
 - The key is stored encrypted on your computer. The page shows only its last 4 characters.
 - On Google's free tier, Google may use what you send to improve its products. A paid key avoids that.
 - Using a key costs money on that service's account (usually very little per voice note).
+
+## Where it runs (and when it stops)
+
+It runs on the computer you install it on. It only receives messages while that computer is on.
+
+| Installed on | Receives messages |
+|---|---|
+| Your own computer, Claude Desktop | While Claude Desktop is open |
+| Your own computer, Claude Code | In the background, even after Claude Code closes, until the computer shuts down. After a restart, it starts again the next time you open Claude Code |
+| A virtual computer that is always on (a cloud machine your AI agent or bot runs on) | All the time, as long as that machine stays on |
+
+- Computer off, asleep or offline: nothing comes in at that time. When it connects again, WhatsApp sends the messages it missed, and the settings page shows "Caught up N messages". If it stays off for about 14 days, WhatsApp removes the link and you scan again.
+- On a virtual computer, set it up with the Claude Code steps in [AGENTS.md](AGENTS.md). You need a way to see that machine's browser once (its screen or remote desktop) to scan the QR.
 
 ## Updating
 
@@ -144,7 +157,7 @@ Claude can read the log at `<your user folder>/WhatsApp MCP/helper.log` to expla
 - **Not official.** It connects the way WhatsApp Web does (a linked device). WhatsApp does not allow unofficial apps, so a number can be banned. Read only (the default) is lower risk, but not zero; turning on sending raises it. Use a second number if you can.
 - **Messages are written by other people.** Claude is told never to follow instructions found in a message. Still, don't ask Claude to act on what a message says without checking it yourself.
 - **Only link your own number.**
-- **When it receives messages.** Installed in Claude Desktop: while Claude is open. Installed with Claude Code: in the background until the computer shuts down. After a gap, only recent messages come back.
+- **When it receives messages.** Only while the computer it runs on is on. See "Where it runs" above.
 - **Where the data is.** `<your user folder>/WhatsApp MCP`, encrypted. The key to open it is on the same computer, so anyone who can use this computer can read it.
 - Files saved to Downloads are not encrypted.
 - Nothing goes to the internet except WhatsApp itself, and Gemini or OpenAI only if you saved a key and asked about a voice note or video.

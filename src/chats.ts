@@ -170,6 +170,20 @@ export function resolveChat(input: string, numberId: string | null): ChatRef {
   return one(hits, v)!;
 }
 
+// A phone number typed by a person, as a WhatsApp address, for sending to
+// someone who has no chat here yet. Null when it is not a phone number.
+export function phoneJid(input: string): string | null {
+  const v = input.trim();
+  if (!/^[+\d][\d\s\-()]{5,}$/.test(v)) return null;
+  let d = v.replace(/\D/g, "");
+  if (!v.startsWith("+") && d.startsWith("0")) {
+    if (!COUNTRY_CODE) throw new Error(`"${input}" starts with 0: write it with the country code (like +60...), or set the country code on the settings page.`);
+    d = COUNTRY_CODE + d.slice(1);
+  }
+  if (d.length < 8 || d.length > 15) throw new Error(`"${input}" does not look like a full phone number.`);
+  return `${d}@s.whatsapp.net`;
+}
+
 // Messages containing every word of `query` (also replied-to text and file
 // names), newest first.
 export function searchRows(query: string, numberId: string | null, chatJid: string | null, lo: number, hi: number, limit: number): Row[] {

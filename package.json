@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-mcp-desktop",
-  "version": "1.5.0",
+  "version": "1.7.0",
   "description": "WhatsApp for Claude, read only by default. In Claude Desktop: install one file, scan a QR. No ngrok, no port to open.",
   "license": "MIT",
   "private": true,

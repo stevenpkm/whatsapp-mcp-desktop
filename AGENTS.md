@@ -66,6 +66,12 @@ HUMAN STEP: on the phone, open WhatsApp > Settings > Linked devices > Link a dev
 
 **9. Check.** Call `status`. When it says connected, suggest "summarize my WhatsApp today", and mention the settings page (`open_settings_page`).
 
+## On a virtual computer (always-on cloud machine)
+
+Same steps as "Install with Claude Code". It keeps receiving as long as that machine is on. Two differences:
+- The QR page opens in that machine's browser (127.0.0.1). If the person cannot see that screen, tell them they need its desktop or remote desktop for the scan. Never send the QR as an image.
+- After that machine restarts, the helper starts again the next time Claude Code starts the tools.
+
 ## Update
 
 Do steps 2 to 5 again, then step 7. Step 6 is already done. The WhatsApp link and the messages stay; no new scan.
