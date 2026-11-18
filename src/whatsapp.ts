@@ -454,8 +454,8 @@ export async function downloadMedia(ref: string, kind: string, session?: Session
 }
 
 // File type, length and size as the message states them (no download).
-export function mediaDetails(ref: string | null): { mime: string | null; seconds: number | null; bytes: number | null } {
-  const none = { mime: null, seconds: null, bytes: null };
+export function mediaDetails(ref: string | null): { mime: string | null; seconds: number | null; bytes: number | null; fileName: string | null } {
+  const none = { mime: null, seconds: null, bytes: null, fileName: null };
   if (!ref) return none;
   try {
     const m = JSON.parse(ref, BufferJSON.reviver) as WAMessage;
@@ -463,7 +463,7 @@ export function mediaDetails(ref: string | null): { mime: string | null; seconds
     const type = content ? getContentType(content) : undefined;
     const media = type ? (content as any)[type] : null;
     if (!media) return none;
-    return { mime: media.mimetype || null, seconds: toNum(media.seconds), bytes: toNum(media.fileLength) };
+    return { mime: media.mimetype || null, seconds: toNum(media.seconds), bytes: toNum(media.fileLength), fileName: media.fileName || null };
   } catch {
     return none;
   }

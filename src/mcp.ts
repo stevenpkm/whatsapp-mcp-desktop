@@ -1,26 +1,27 @@
 // MCP tools for Claude. No tool sends, deletes or changes anything on WhatsApp.
-// connect_whatsapp and save_file only act on this computer. transcribe_voice
-// sends that one voice note to Google Gemini or OpenAI, and watch_video that
-// one video to Gemini, only with the person's own key from the settings page.
-// Output is plain
-// text lines, the cheapest form for a model to read.
+// connect_whatsapp, save_file and save_files only act on this computer.
+// transcribe_voice sends that one voice note to Google Gemini or OpenAI, and
+// watch_video that one video to Gemini, only with the person's own key from
+// the settings page. Output is plain text lines, the cheapest form for a model
+// to read.
 
-import { mkdirSync, writeFileSync } from "fs";
-import { homedir } from "os";
 import { join } from "path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { VERSION } from "./paths.js";
 import { chatLabel, fmt, isGroup, line, namesForRows, plural, range, resolveChat, resolveNumber, searchRows, TZ } from "./chats.js";
-import { KIND_LABEL, mediaFile } from "./media.js";
+import { KIND_LABEL, mediaFile, mediaKey } from "./media.js";
+import { documentText, DOWNLOADS, safeName, saveBytes } from "./files.js";
 import { hasGeminiKey, KEY_PAGE, understand } from "./gemini.js";
 import { hasOpenAIKey, transcribeOpenAI } from "./openai.js";
 import { loadSettings } from "./panel.js";
+import { allNumbers, numberTag } from "./numbers.js";
+import { chatSummaries, namesFor, parseBody, readChat, stats } from "./store.js";
 
 const NO_VOICE_KEY = `No key for voice notes yet. Call open_settings_page and tell the person to paste a Google Gemini key (voice notes and videos, free key at ${KEY_PAGE}) or an OpenAI key (voice notes only) under "Voice notes and videos".`;
 const NO_VIDEO_KEY = `Videos need a Google Gemini key (an OpenAI key only does voice notes). Call open_settings_page and tell the person to paste one under "Voice notes and videos" (free key at ${KEY_PAGE}).`;
-import { allNumbers, numberTag } from "./numbers.js";
-import { chatSummaries, namesFor, readChat, stats } from "./store.js";
+const READ_LIMIT = 60_000;
+const UPLOAD_HINT = "To upload a saved file with another tool (like Google Drive), use its path and SHA-256 above.";
 
 function ok(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -42,9 +43,6 @@ const STATE_WORDS: Record<string, string> = {
   disconnected: "Connection dropped, it reconnects by itself. Nothing to do. If the internet is fine and this lasts over 30 minutes, reopen Claude.",
   logged_out: "The link was removed on the phone or by WhatsApp. Call connect_whatsapp and scan again.",
   off: "WhatsApp is switched off (test mode).",
-};
-const EXT: Record<string, string> = {
-  "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "audio/ogg": ".ogg", "audio/mpeg": ".mp3", "audio/mp4": ".m4a", "video/mp4": ".mp4", "application/pdf": ".pdf",
 };
 
 export function buildMcpServer(retentionDays: number, connect: (startOver: boolean) => Promise<string>, openPanel: () => string): McpServer {
@@ -285,24 +283,101 @@ export function buildMcpServer(retentionDays: number, connect: (startOver: boole
   );
 
   server.registerTool(
+    "read_file",
+    {
+      title: "Read a document",
+      description:
+        "The text inside the file of a [document id=...] message: PDFs (with a text layer) and text files (txt, md, csv, json, html...). Use it to read invoices, quotes or reports sent in a chat. Scanned PDFs, Word and Excel files cannot be read; save them with save_file.",
+      inputSchema: { media_id: z.string().min(1) },
+      annotations: READ_ONLY,
+    },
+    async ({ media_id }) => {
+      try {
+        const f = await mediaFile(media_id, ["document"]);
+        const r = await documentText(f.bytes, f.mime, f.fileName);
+        if ("cannot" in r) return ok(`${f.fileName || "Document"} | ${size(f.bytes.length)}\n${r.cannot}`);
+        const cut = r.text.length > READ_LIMIT;
+        const head = [f.fileName || "Document", r.pages ? plural(r.pages, "page") : null, size(f.bytes.length)].filter(Boolean).join(" | ");
+        return ok(`${head}\n${UNTRUSTED}${cut ? `\nLong file: showing the first ${READ_LIMIT.toLocaleString("en")} of ${r.text.length.toLocaleString("en")} characters.` : ""}\n\n${r.text.slice(0, READ_LIMIT)}`);
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
     "save_file",
     {
       title: "Save a file to Downloads",
       description:
-        "Saves the file of an [image id=...], [voice note id=...], [video id=...] or [document id=...] message to the Downloads folder (not encrypted there) and says where. To hear a voice note use transcribe_voice, to see a video use watch_video.",
+        "Saves the file of an [image id=...], [voice note id=...], [video id=...] or [document id=...] message to Downloads > WhatsApp MCP (not encrypted there) under the sender's file name. Returns the full path and SHA-256, which another tool (like a Google Drive connector) can use to upload it. To read a document use read_file, to hear a voice note transcribe_voice, to see a video watch_video.",
       inputSchema: { media_id: z.string().min(1) },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     },
     async ({ media_id }) => {
       try {
         const f = await mediaFile(media_id, ["image", "audio", "video", "document"]);
-        const dir = join(homedir(), "Downloads", "WhatsApp MCP");
-        mkdirSync(dir, { recursive: true });
-        const type = f.mime.split(";")[0].trim();
-        const path = join(dir, `${media_id.replace(/[^A-Za-z0-9_-]/g, "_")}${EXT[type] || ""}`);
-        writeFileSync(path, f.bytes);
-        const parts = [KIND_LABEL[f.kind], f.seconds ? clock(f.seconds) : null, size(f.bytes.length), type].filter(Boolean);
-        return ok(`${parts.join(" | ")}\nSaved: ${path}`);
+        const s = saveBytes(DOWNLOADS, f.fileName, media_id, f.mime, f.bytes);
+        const parts = [KIND_LABEL[f.kind], f.seconds ? clock(f.seconds) : null, size(f.bytes.length), f.mime.split(";")[0].trim()].filter(Boolean);
+        return ok(`${parts.join(" | ")}\nSaved: ${s.path}${s.same ? " (already there)" : ""}\nSHA-256: ${s.sha256}\n${UPLOAD_HINT}`);
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "save_files",
+    {
+      title: "Save all files of a chat",
+      description:
+        "Saves every file of one kind from one chat to Downloads > WhatsApp MCP > <chat name>, under the senders' file names. Filter by part of the file name or caption (`name`, like invoice) and by date. Returns each file's path and SHA-256, for uploading with another tool (like a Google Drive connector). Files WhatsApp no longer has are listed as skipped.",
+      inputSchema: {
+        chat: z.string().min(1).describe("chat_id, phone number or part of the chat name"),
+        number: NUMBER,
+        kind: z.enum(["document", "image", "video", "audio", "all"]).default("document").describe("document = PDFs and other files"),
+        name: z.string().optional().describe("Only files whose name or caption contains this, case-insensitive"),
+        since: z.string().optional().describe("2026-09-27, 3d or 12h"),
+        until: z.string().optional(),
+        limit: z.number().int().min(1).max(200).default(50),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    },
+    async ({ chat, number, kind, name, since, until, limit }) => {
+      try {
+        const c = resolveChat(chat, resolveNumber(number));
+        const { lo, hi } = range(since, until);
+        const { rows } = readChat(c.number_id, c.chat_jid, lo, hi, 100_000);
+        const want = (k: string | null) => !!k && (kind === "all" ? KIND_LABEL[k] !== undefined : k === kind);
+        const needle = name?.toLowerCase();
+        const picked = rows
+          .filter((r) => want(r.kind))
+          .map((r) => ({ r, b: parseBody(r.body_enc) }))
+          .filter(({ b }) => !needle || `${b.f || ""} ${b.t || ""}`.toLowerCase().includes(needle))
+          .reverse()
+          .slice(0, limit);
+        if (!picked.length) return ok("No files like that in this chat.");
+        const label = chatLabel(c.chat_jid, namesFor([c.chat_jid]));
+        const dir = join(DOWNLOADS, safeName(label));
+        const out: string[] = [];
+        let saved = 0;
+        for (const { r, b } of picked) {
+          const id = mediaKey(r.number_id, r.id);
+          const what = `[${fmt(r.ts)}] ${b.f || KIND_LABEL[r.kind!]}`;
+          if (!r.has_ref) {
+            out.push(`- ${what} | skipped: file not kept`);
+            continue;
+          }
+          try {
+            const f = await mediaFile(id, [r.kind!]);
+            const s = saveBytes(dir, f.fileName || b.f || null, id, f.mime, f.bytes);
+            saved += 1;
+            out.push(`- ${what} | id=${id} | ${size(f.bytes.length)} | ${s.path} | SHA-256 ${s.sha256}`);
+          } catch (e) {
+            out.push(`- ${what} | id=${id} | skipped: ${(e as Error)?.message || e}`);
+          }
+        }
+        return ok(`${plural(saved, "file")} saved to ${dir} (newest first${picked.length === limit ? `, limit ${limit} reached` : ""}):\n${out.join("\n")}\n${UPLOAD_HINT}`);
       } catch (e) {
         return fail(e);
       }

@@ -26,7 +26,7 @@ export function parseMediaKey(key: string): { numberId: string; id: string } {
 export async function mediaFile(
   key: string,
   kinds: string[],
-): Promise<{ bytes: Buffer; kind: string; mime: string; seconds: number | null }> {
+): Promise<{ bytes: Buffer; kind: string; mime: string; seconds: number | null; fileName: string | null }> {
   const { numberId, id } = parseMediaKey(key);
   const info = mediaInfo(numberId, id);
   if (!info?.kind || !kinds.includes(info.kind)) throw new Error(`no ${kinds.map((k) => KIND_LABEL[k] || k).join(" or ")} with that id`);
@@ -39,5 +39,5 @@ export async function mediaFile(
     saveMedia(numberId, id, bytes);
   }
   const d = mediaDetails(info.ref);
-  return { bytes, kind: info.kind, mime: d.mime || DEFAULT_MIME[info.kind], seconds: d.seconds };
+  return { bytes, kind: info.kind, mime: d.mime || DEFAULT_MIME[info.kind], seconds: d.seconds, fileName: d.fileName };
 }

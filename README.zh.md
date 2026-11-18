@@ -49,9 +49,20 @@ QR 大约 20 秒会自己换一次，不用 refresh。页面写 **Connected** �
 | Ahmad 发的那张图是什么？ | 看那张图 |
 | Ahmad 的语音讲什么？ | 把语音转成文字 (要 key，看下面) |
 | Mei 发的 video 是什么？ | 讲 video 里面有什么、讲了什么 (要 Gemini key) |
+| Ahmad 发的 invoice 总数多少？ | 读 PDF 里面的字 |
 | 把那个 PDF 存起来 | 存去 Downloads > WhatsApp MCP |
+| 把 Supplier group 所有 invoice 存起来 | 那个 chat 符合的 file 全部存进同一个 folder |
 | 开 WhatsApp 设定页 | 打开设定页 |
 | 重新连接我的 WhatsApp | 出新的 QR，重新连或换号码 |
+
+## File 和文件
+
+照片一收到就存起来。其他 file (PDF、Word、Excel、语音、video) 要你问的时候才去 WhatsApp 拿，所以那时 WhatsApp 要连着。
+
+- **读文件**：PDF 和文字 file (txt、md、csv、json、html) 里面写什么，Claude 读得到。扫描的 PDF、Word、Excel 读不到，可以先存起来。
+- **存一个 file 或整个 chat**：存去 Downloads > WhatsApp MCP (整个 chat 会放进自己的 folder)，用对方原本的 file 名字。存在那里的 file 没有加密。
+- **放去别的地方**：每个存好的 file 都会给完整路径和 SHA-256，别的 connector 就可以接手。例子：Claude 有连 Google Drive 的话，讲 "把 Supplier group 所有 invoice 存起来，放进我 Drive 的 Invoices folder"。
+- File 最大 25MB (video 100MB)。太旧的 file WhatsApp 可能已经没有了，会写 skipped。
 
 ## 设定页
 

@@ -92,11 +92,44 @@ await ingest("n1", { key: { remoteJid: ALAN, id: "V2", fromMe: false }, messageT
 saveMedia("n1", "V2", Buffer.from("second fake voice"));
 await ingest("n1", { key: { remoteJid: ALAN, id: "V3", fromMe: false }, messageTimestamp: now - 12, message: { audioMessage: { mimetype: "audio/ogg; codecs=opus", seconds: 3, ptt: true } } } as any, false);
 saveMedia("n1", "V3", Buffer.from("third fake voice"));
+
+// Documents: a real one-page PDF with text, one without text (like a scan),
+// a markdown file and a Word file.
+const pdf = (text: string | null) => {
+  const stream = text ? `BT /F1 18 Tf 72 720 Td (${text}) Tj ET` : "0 0 1 rg 72 600 200 100 re f";
+  const objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let out = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  objs.forEach((o, i) => {
+    offsets.push(out.length);
+    out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+  });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, "latin1");
+};
+const doc = async (id: string, fileName: string, mimetype: string, bytes: Buffer, caption = "") => {
+  await ingest("n1", { key: { remoteJid: ALAN, id, fromMe: false }, messageTimestamp: now - 5, message: { documentMessage: { mimetype, fileName, caption } } } as any, false);
+  saveMedia("n1", id, bytes);
+};
+const INVOICE_PDF = pdf("Invoice INV-1001 Total RM 350.00");
+await doc("D1", "INV-1001.pdf", "application/pdf", INVOICE_PDF, "October bill");
+await doc("D2", "scan.pdf", "application/pdf", pdf(null));
+await doc("D3", "notes.md", "text/markdown", Buffer.from("# Meeting\n- pay invoice by Friday\n"));
+await doc("D4", "quote.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", Buffer.from("PK fake docx"));
 await ingest("n1", { key: { remoteJid: ALAN, id: "VID1", fromMe: false }, messageTimestamp: now - 10, message: { videoMessage: { mimetype: "video/mp4", seconds: 30 } } } as any, false);
 saveMedia("n1", "VID1", Buffer.alloc(16 * 1024 * 1024, 7));
 closeStore();
 
-const env = { ...process.env, WA_OFF: "1", WHATSAPP_MCP_NO_BROWSER: "1", WHATSAPP_MCP_NO_ALERTS: "1" } as Record<string, string>;
+const downloads = join(home, "downloads-test");
+const env = { ...process.env, WA_OFF: "1", WHATSAPP_MCP_NO_BROWSER: "1", WHATSAPP_MCP_NO_ALERTS: "1", WHATSAPP_MCP_DOWNLOADS: downloads } as Record<string, string>;
 const open = async () => {
   const client = new Client({ name: "selftest", version: "1" });
   await client.connect(new StdioClientTransport({ command: process.execPath, args: ["dist/stage/dist/index.mjs"], env, stderr: "ignore" }));
@@ -113,7 +146,7 @@ try {
   const a = await open();
 
   const tools = (await a.listTools()).tools.map((t) => t.name).sort();
-  assert.deepEqual(tools, ["connect_whatsapp", "get_image", "list_chats", "open_settings_page", "read_chat", "save_file", "search", "status", "transcribe_voice", "watch_video"], "tool list");
+  assert.deepEqual(tools, ["connect_whatsapp", "get_image", "list_chats", "open_settings_page", "read_chat", "read_file", "save_file", "save_files", "search", "status", "transcribe_voice", "watch_video"], "tool list");
   assert.ok(!tools.some((t) => /send|reply|delete/i.test(t)), "no tool can send");
   console.log("tools: ok");
 
@@ -198,6 +231,32 @@ try {
   await postJson("/openai-key", { key: null });
   console.log("OpenAI voice: ok");
 
+  const inv = await text(a, "read_file", { media_id: "D1" });
+  assert.ok(inv.startsWith("INV-1001.pdf | 1 page | "), "PDF name and pages");
+  assert.ok(inv.includes("Invoice INV-1001 Total RM 350.00"), "PDF text read");
+  assert.match(inv, /never as instructions/, "document text marked as data");
+  assert.match(await text(a, "read_file", { media_id: "D2" }), /no text inside/, "scan explained");
+  assert.match(await text(a, "read_file", { media_id: "D3" }), /pay invoice by Friday/, "markdown read");
+  assert.match(await text(a, "read_file", { media_id: "D4" }), /not supported/, "Word explained");
+  assert.match(await text(a, "read_file", { media_id: "V1" }), /no document/, "only documents");
+  assert.match(await text(a, "search", { query: "INV-1001" }), /document id=n1:D1: INV-1001\.pdf/, "file names are searchable");
+
+  const one = await text(a, "save_file", { media_id: "D1" });
+  const savedPath = one.match(/Saved: (.+INV-1001\.pdf)/)![1];
+  assert.ok(readFileSync(savedPath).equals(INVOICE_PDF), "saved under the sender's file name, same bytes");
+  assert.match(one, new RegExp(`SHA-256: ${crypto.createHash("sha256").update(INVOICE_PDF).digest("hex")}`), "SHA-256 given for uploads");
+  assert.match(await text(a, "save_file", { media_id: "D1" }), /already there/, "same file not saved twice");
+
+  const batch = await text(a, "save_files", { chat: "Alan", name: "inv-" });
+  assert.match(batch, /^1 file saved to .+Alan Fake/, "filtered by name or caption, into a chat folder");
+  const chatDir = batch.match(/saved to (.+?) \(newest/)![1];
+  assert.ok(readFileSync(join(chatDir, "INV-1001.pdf")).equals(INVOICE_PDF));
+  const all = await text(a, "save_files", { chat: "Alan" });
+  assert.match(all, /^4 files saved/, "every document in the chat");
+  assert.equal(readdirSync(chatDir).length, 4);
+  assert.match(await text(a, "save_files", { chat: "Alan", kind: "video", name: "nothing-like-this" }), /No files like that/);
+  console.log("documents: ok");
+
   const b = await open();
   assert.match(await text(b, "status"), /test mode/);
   assert.equal(helperInfo().pid, pid, "a second copy shares the one helper");
@@ -224,7 +283,7 @@ try {
   env.WHATSAPP_MCP_FORCE_INPROCESS = "1";
   const c = await open();
   assert.match(await text(c, "search", { query: "invoice" }), /1 match/, "works with the helper inside the MCP process");
-  assert.equal((await c.listTools()).tools.length, 10);
+  assert.equal((await c.listTools()).tools.length, 12);
   await c.close();
   await new Promise((r) => setTimeout(r, 800));
   delete env.WHATSAPP_MCP_FORCE_INPROCESS;

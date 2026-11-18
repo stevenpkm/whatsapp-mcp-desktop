@@ -49,9 +49,20 @@ Back in Claude, ask: **summarize my WhatsApp today**
 | What's in the picture Ahmad sent? | Looks at the picture |
 | What did Ahmad say in his voice note? | Turns the voice note into text (needs a key, see below) |
 | What's in the video Mei sent? | Describes the video and what is said (needs a Gemini key) |
+| What's the total on the invoice Ahmad sent? | Reads the text inside the PDF |
 | Save that PDF | Saves it to Downloads > WhatsApp MCP |
+| Save all the invoices from the Supplier group | Saves every matching file of that chat into one folder |
 | Open the WhatsApp settings page | Opens the settings page |
 | Reconnect my WhatsApp | Shows a new QR, to relink or change number |
+
+## Files and documents
+
+Pictures are kept as they arrive. Other files (PDFs, Word, Excel, voice notes, videos) are fetched from WhatsApp only when you ask, so they need WhatsApp connected at that moment.
+
+- **Read a document**: Claude reads the text inside PDFs and text files (txt, md, csv, json, html). Scanned PDFs, Word and Excel files cannot be read this way; save them instead.
+- **Save one file or a whole chat**: files go to Downloads > WhatsApp MCP (a whole chat into its own folder), under the sender's file name. Files there are not encrypted.
+- **Put them somewhere else**: each saved file comes with its full path and SHA-256, so another connector can pick it up. Example: with a Google Drive connector in Claude, say "save all the invoices from the Supplier group and put them in my Drive folder Invoices".
+- Files up to 25 MB (videos 100 MB). Very old files may be gone from WhatsApp; they are listed as skipped.
 
 ## The settings page
 

@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
 
-export const VERSION = "1.3.0";
+export const VERSION = "1.4.0";
 
 export const HOME = process.env.WHATSAPP_MCP_HOME || join(homedir(), "WhatsApp MCP");
 export const DATA_DIR = join(HOME, "data");
