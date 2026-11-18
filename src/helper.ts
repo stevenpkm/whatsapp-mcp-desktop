@@ -133,23 +133,32 @@ function start() {
       alertTimer.unref();
     }
   }
-  // Messages sent while this was off come in right after it connects again.
-  // Count them for the history, so a gap that was caught up is visible.
-  let catchUp: { since: number; n: number; timer: NodeJS.Timeout } | null = null;
-  const CATCH_UP_MS = 120_000;
-  function startCatchUp() {
-    if (catchUp) clearTimeout(catchUp.timer);
-    const c = { since: Date.now(), n: 0, timer: setTimeout(() => {
+  // Messages sent while this was off come in after it connects again, in
+  // batches; a big backlog can take many minutes. Count them for the history,
+  // and close the count 2 minutes after the last one, so a gap that was caught
+  // up is visible.
+  let catchUp: { since: number; n: number; timer: NodeJS.Timeout | null } | null = null;
+  const CATCH_UP_QUIET_MS = 120_000;
+  function closeCatchUpLater(c: NonNullable<typeof catchUp>) {
+    if (c.timer) clearTimeout(c.timer);
+    c.timer = setTimeout(() => {
       if (c.n) addEvent("caught_up", undefined, c.n);
       console.log(`[helper] caught up ${c.n} message(s) from while it was off`);
       if (catchUp === c) catchUp = null;
-    }, CATCH_UP_MS) };
+    }, CATCH_UP_QUIET_MS);
     c.timer.unref();
-    catchUp = c;
+  }
+  function startCatchUp() {
+    if (catchUp?.timer) clearTimeout(catchUp.timer);
+    catchUp = { since: Date.now(), n: 0, timer: null };
+    closeCatchUpLater(catchUp);
   }
   const countingIngest: typeof ingest = (numberId, m, history) => {
     const ts = Number(m.messageTimestamp || 0) * 1000;
-    if (catchUp && !history && ts && ts < catchUp.since - 5_000) catchUp.n += 1;
+    if (catchUp && !history && ts && ts < catchUp.since - 5_000) {
+      catchUp.n += 1;
+      closeCatchUpLater(catchUp);
+    }
     return ingest(numberId, m, history);
   };
   setHooks({ message: countingIngest, contacts: ingestContacts, groups: ingestGroups, linked: ingestLinked, status: (id, status, code) => {

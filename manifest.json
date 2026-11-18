@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "whatsapp-mcp-desktop",
   "display_name": "WhatsApp MCP",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Let Claude read and search your own WhatsApp. Read only by default; sending is off unless you turn it on. Everything stays on this computer.",
   "author": { "name": "whatsapp-mcp-desktop contributors" },
   "license": "MIT",

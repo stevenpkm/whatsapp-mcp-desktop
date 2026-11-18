@@ -77,13 +77,41 @@ const BAD_SESSION_LIMIT = 3;
 const BAD_SESSION_WINDOW_MS = 2 * 3_600_000;
 // On connect the library holds every incoming event until WhatsApp says all
 // missed messages are delivered. With a big backlog it asks for one batch of
-// 100 only, that signal never comes, and nothing reaches the database (seen in
-// a real log: 105 messages held for 5 minutes). Ask for the next batches, and
-// if events are still held, release them.
-const HOLD_CHECK_MS = 10_000;
-const HOLD_ASK_AFTER_MS = 15_000;
-const HOLD_MAX_ASKS = 10;
-const HOLD_RELEASE_AFTER_MS = 60_000;
+// 100 only, that signal never comes, and nothing reaches the database (real
+// logs: 105 messages held for 5 minutes; 8 days of backlog stuck after one
+// release). So until WhatsApp says it is done: ask for the next batch each
+// time the last one goes quiet, and release anything held for 5 seconds.
+const HOLD_CHECK_MS = 500;
+const HOLD_IDLE_MS = 1_500;
+const HOLD_RELEASE_AFTER_MS = 5_000;
+const HOLD_GIVE_UP_MS = 60 * 60_000;
+// Asking when nothing is left would be noise to WhatsApp: after this many asks
+// in a row that bring no missed message, stop asking.
+const HOLD_MAX_EMPTY_ASKS = 3;
+
+// What arrives while catching up, tracked from the moment the socket exists:
+// the "all delivered" signal can come before the connection reports open.
+export interface Backlog {
+  done: boolean;
+  lastOfflineAt: number;
+  offlineCount: number;
+}
+
+export function trackBacklog(sock: Pick<WASocket, "ws">): Backlog {
+  const backlog: Backlog = { done: false, lastOfflineAt: 0, offlineCount: 0 };
+  // Only missed (offline) messages count: live traffic in busy groups must not
+  // look like the backlog is still coming.
+  const offlineSeen = (node: any) => {
+    if (node?.attrs?.offline === undefined) return;
+    backlog.lastOfflineAt = Date.now();
+    backlog.offlineCount += 1;
+  };
+  for (const name of ["CB:message", "CB:notification", "CB:receipt", "CB:call"]) sock.ws.on(name, offlineSeen);
+  sock.ws.on("CB:ib,,offline", () => {
+    backlog.done = true;
+  });
+  return backlog;
+}
 const WATCHDOG_INTERVAL_MS = 60_000;
 
 let stopping = false;
@@ -172,25 +200,48 @@ export class Session {
     }
   }
 
-  private watchHeldEvents(sock: WASocket, myEpoch: number) {
+  private watchHeldEvents(sock: WASocket, myEpoch: number, backlog: Backlog) {
     if (this.holdTimer) clearInterval(this.holdTimer);
-    const openedAt = Date.now();
+    const started = Date.now();
+    let lastAskAt = started;
+    let heldSince = sock.ev.isBuffering() ? started : 0;
     let asks = 0;
+    let releases = 0;
+    let emptyAsks = 0;
+    let countAtAsk = backlog.offlineCount;
+    const stop = (why: string) => {
+      if (this.holdTimer) clearInterval(this.holdTimer);
+      this.holdTimer = null;
+      if (asks || releases) this.log(`missed messages: ${why} (asked for ${asks} more batch(es), released held messages ${releases}x)`);
+    };
     this.holdTimer = setInterval(() => {
-      const stop = () => {
-        if (this.holdTimer) clearInterval(this.holdTimer);
-        this.holdTimer = null;
-      };
-      if (myEpoch !== this.epoch || !sock.ev.isBuffering()) return stop();
-      const age = Date.now() - openedAt;
-      if (age >= HOLD_RELEASE_AFTER_MS) {
-        console.warn(`[vault ${this.id}] incoming messages were still held after ${Math.round(age / 1000)}s, releasing them`);
+      if (myEpoch !== this.epoch) return stop("connection replaced");
+      const now = Date.now();
+      const held = sock.ev.isBuffering();
+      heldSince = held ? heldSince || now : 0;
+      if (held && now - heldSince >= HOLD_RELEASE_AFTER_MS) {
         sock.ev.flush();
-        return stop();
+        releases += 1;
+        heldSince = 0;
       }
-      if (age >= HOLD_ASK_AFTER_MS && asks < HOLD_MAX_ASKS) {
+      if (backlog.done && !sock.ev.isBuffering()) return stop("all delivered");
+      const giveUp = (why: string) => {
+        if (sock.ev.isBuffering()) {
+          sock.ev.flush();
+          releases += 1;
+        }
+        return stop(why);
+      };
+      if (now - started >= HOLD_GIVE_UP_MS) return giveUp("stopped asking after an hour");
+      const quietSince = Math.max(backlog.lastOfflineAt, lastAskAt);
+      if (!backlog.done && now - quietSince >= HOLD_IDLE_MS) {
+        // Did the last ask bring anything?
+        if (asks) emptyAsks = backlog.offlineCount > countAtAsk ? 0 : emptyAsks + 1;
+        if (emptyAsks >= HOLD_MAX_EMPTY_ASKS) return giveUp("nothing more came, stopped asking");
+        countAtAsk = backlog.offlineCount;
         asks += 1;
-        this.log(`messages still held, asking WhatsApp for the next batch (${asks})`);
+        lastAskAt = now;
+        if (asks === 1 || asks % 10 === 0) this.log(`asking WhatsApp for the next batch of missed messages (${asks})`);
         sock.sendNode({ tag: "ib", attrs: {}, content: [{ tag: "offline_batch", attrs: { count: "100" } }] }).catch(() => {});
       }
     }, HOLD_CHECK_MS);
@@ -204,6 +255,8 @@ export class Session {
     this.healthTimer = setTimeout(async () => {
       this.healthTimer = null;
       if (myEpoch !== this.epoch || this.status !== "connected" || stopping) return;
+      // Busy fetching missed messages: a slow answer now is expected, check later.
+      if (this.holdTimer) return this.scheduleHealth(sock, myEpoch, HEALTH_FIRST_MS);
       const me = (this.meJid || "").split(":")[0].split("@")[0];
       let ok = false;
       try {
@@ -263,6 +316,8 @@ export class Session {
         shouldIgnoreJid: (jid) => !!jid && (jid.endsWith("@broadcast") || jid.endsWith("@newsletter")),
       });
       this.sock = sock;
+
+      const backlog = trackBacklog(sock);
 
       sock.ev.on("creds.update", saveCreds);
 
@@ -343,7 +398,7 @@ export class Session {
           this.log(`connected (epoch ${myEpoch})`);
           this.healthFails = 0;
           this.scheduleHealth(sock, myEpoch, HEALTH_FIRST_MS);
-          this.watchHeldEvents(sock, myEpoch);
+          this.watchHeldEvents(sock, myEpoch, backlog);
           safe("status", () => hooks?.status?.(id, "connected"));
           // Group names, once per connection.
           setTimeout(() => {

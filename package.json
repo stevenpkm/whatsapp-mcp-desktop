@@ -1,13 +1,14 @@
 {
   "name": "whatsapp-mcp-desktop",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "WhatsApp for Claude, read only by default. In Claude Desktop: install one file, scan a QR. No ngrok, no port to open.",
   "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "selftest": "npm run build && tsx scripts/selftest.ts"
+    "selftest": "npm run build && tsx scripts/selftest.ts",
+    "test:backlog": "tsx scripts/backlog-test.mts"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
